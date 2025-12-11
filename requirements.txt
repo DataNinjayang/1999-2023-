@@ -16,3 +16,4 @@ Pillow>=10.0.0
 matplotlib
 seaborn
 plotly
+reportlab

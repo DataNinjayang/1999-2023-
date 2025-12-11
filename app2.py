@@ -173,7 +173,7 @@ st.markdown("本系统提供企业数字化技术应用数据查询与分析功�
 def load_data():
     try:
         # 使用相对路径读取Excel文件
-        file_path = "1999-2023.xlsx"
+        file_path = "1_1999-2023.xlsx"
         df = pd.read_excel(file_path)
         
         # 数据清洗
@@ -975,3 +975,4 @@ if df is not None:
     st.markdown('<div class="footer">© 2023 企业数字化转型数据查询分析系统 | 数据更新时间: 2023-12-10</div>', unsafe_allow_html=True)
 else:
     st.error("无法加载数据，请检查文件路径或文件格式是否正确。")
+

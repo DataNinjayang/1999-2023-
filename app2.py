@@ -235,268 +235,171 @@ def image_to_reportlab(img, max_width=18, max_height=12):
 
 # PDF导出功能函数
 def generate_pdf(df, selected_company, year_range, selected_industries):
-    """生成PDF报告，包含主界面图表、企业详细数据和智能结论建议"""
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, 
-                                        PageBreak, Image)
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    import os
 
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=2.5*cm,
-            leftMargin=2.5*cm,
-            topMargin=2*cm,
-            bottomMargin=2*cm,
-            title="企业数字化转型数据分析报告",
-            author="数字化转型分析系统",
-            subject="企业数字化转型数据查询分析"
-        )
+    # 字体注册
+    font_path = os.path.join(os.path.dirname(__file__), "SimHei.ttf")
+    font_name = 'SimHei'
+    pdfmetrics.registerFont(TTFont(font_name, font_path))
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='MyTitle', fontName=font_name, fontSize=22, alignment=TA_CENTER, textColor=colors.HexColor('#1E88E5'), spaceAfter=20))
+    styles.add(ParagraphStyle(name='MySubTitle', fontName=font_name, fontSize=18, alignment=TA_CENTER, textColor=colors.HexColor('#D32F2F'), spaceAfter=10))
+    styles.add(ParagraphStyle(name='MyHeader', fontName=font_name, fontSize=15, alignment=TA_LEFT, textColor=colors.HexColor('#1976D2'), spaceAfter=8))
+    styles.add(ParagraphStyle(name='NormalCN', fontName=font_name, fontSize=12, alignment=TA_LEFT, leading=18, spaceAfter=6))
 
-        styles = getSampleStyleSheet()
-        font_name = "Helvetica"
-        try:
-            font_paths = {
-                'SimHei': 'SimHei.ttf',
-                'MicrosoftYaHei': 'MicrosoftYaHei.ttf',
-                'Arial Unicode MS': 'ARIALUNI.TTF',
-                'STSong': 'STSONG.TTF'
-            }
-            for font_key, font_file in font_paths.items():
-                try:
-                    pdfmetrics.registerFont(TTFont(font_key, font_file))
-                    font_name = font_key
-                    break
-                except:
-                    continue
-        except:
-            pass
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    elements = []
 
-        # 样式定义
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, alignment=TA_CENTER, fontName=font_name, textColor=colors.darkblue, spaceAfter=20)
-        h1_style = ParagraphStyle('H1', parent=styles['Heading2'], fontSize=15, alignment=TA_LEFT, fontName=font_name, textColor=colors.darkblue, spaceAfter=12)
-        h2_style = ParagraphStyle('H2', parent=styles['Heading3'], fontSize=12, alignment=TA_LEFT, fontName=font_name, textColor=colors.darkgreen, spaceAfter=8)
-        normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, fontName=font_name, leading=15, spaceAfter=6)
+    # 封面
+    elements.append(Paragraph("企业数字化转型数据分析报告", styles['MyTitle']))
+    if selected_company:
+        elements.append(Paragraph(f"{selected_company} 专项分析", styles['MySubTitle']))
+    else:
+        elements.append(Paragraph("行业整体分析报告", styles['MySubTitle']))
+    elements.append(Spacer(1, 20))
 
-        elements = []
-        # 封面
-        elements.append(Paragraph("企业数字化转型数据分析报告", title_style))
-        if selected_company:
-            elements.append(Paragraph(f"{selected_company} 专项分析", h1_style))
+    # 基本信息
+    elements.append(Paragraph("一、企业基本信息", styles['MyHeader']))
+    info_data = [
+        ["企业名称", selected_company or "全部企业"],
+        ["年份范围", f"{year_range[0]} - {year_range[1]}"],
+        ["行业", ", ".join(selected_industries) if selected_industries else "全部行业"],
+        ["数据记录数", f"{len(df):,} 条"],
+        ["涉及企业数", f"{df['企业名称'].nunique()} 家"],
+        ["报告生成时间", datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+    ]
+    info_table = Table(info_data, colWidths=[3*cm, 10*cm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), font_name),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#F0F8FF')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey)
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 12))
+
+    # 关键指标
+    elements.append(Paragraph("二、关键指标概览", styles['MyHeader']))
+    if selected_company:
+        company_data = df[df['企业名称'] == selected_company]
+        latest_year = company_data['年份'].max()
+        latest_data_df = company_data[company_data['年份'] == latest_year]
+        if not latest_data_df.empty:
+            latest_data = latest_data_df.iloc[0]
         else:
-            elements.append(Paragraph("行业整体分析报告", h1_style))
-        elements.append(Spacer(1, 20))
-
-        # 查询条件表格
-        condition_data = [
-            ['查询维度', '详情'],
-            ['年份范围', f"{year_range[0]}年 - {year_range[1]}年"],
-            ['选择行业', ', '.join(selected_industries) if selected_industries else '全部行业'],
-            ['选择企业', selected_company if selected_company else '全部企业'],
-            ['报告生成时间', datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')],
-            ['数据记录数', f"{len(df):,} 条"],
-            ['涉及企业数', f"{df['企业名称'].nunique()} 家"]
+            latest_data = pd.Series({col: 0 for col in company_data.columns})
+        overview_data = [
+            ["最新年份", str(latest_year)],
+            ["最新数字化程度", f"{latest_data['数字化程度']:.2f}"],
+            ["平均数字化程度", f"{company_data['数字化程度'].mean():.2f}"],
+            ["技术种类数", f"{latest_data['技术种类数']:.0f}"],
+            ["技术多样性", f"{latest_data['技术多样性']:.2f}"],
+            ["累计总词频", f"{company_data['总词频'].sum():.0f}"]
         ]
-        condition_table = Table(condition_data, colWidths=[3*cm, 10*cm])
-        condition_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), font_name),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('PADDING', (0, 0), (-1, -1), 5)
-        ]))
-        elements.append(condition_table)
-        elements.append(PageBreak())
+    else:
+        overview_data = [
+            ["企业数量", f"{df['企业名称'].nunique()} 家"],
+            ["行业数量", f"{df['行业名称'].nunique()} 家"],
+            ["平均数字化程度", f"{df['数字化程度'].mean():.2f}"],
+            ["最高数字化程度", f"{df['数字化程度'].max():.2f}"],
+            ["最低数字化程度", f"{df['数字化程度'].min():.2f}"],
+            ["平均总词频", f"{df['总词频'].mean():.0f}"]
+        ]
+    overview_table = Table(overview_data, colWidths=[4*cm, 6*cm])
+    overview_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), font_name),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E3F2FD')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey)
+    ]))
+    elements.append(overview_table)
+    elements.append(Spacer(1, 12))
 
-        # ========== 图表部分 ==========
-        elements.append(Paragraph("一、可视化分析", h1_style))
+    # 可视化图表
+    elements.append(Paragraph("三、数字化可视化数据图表", styles['MyHeader']))
+    tech_metrics = ['人工智能', '区块链', '大数据', '云计算', '物联网', '5G通信', '数字平台', '数字安全', '智慧行业应用']
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
 
-        # 1. 总词频趋势
-        elements.append(Paragraph("1.1 总词频年度趋势", h2_style))
-        try:
-            trend_data = df.groupby('年份')['总词频'].mean().reset_index()
-            fig_trend = px.line(trend_data, x='年份', y='总词频', title='总词频年度趋势', labels={'总词频': '平均总词频', '年份': '年份'}, markers=True)
-            img_trend = fig_to_image(fig_trend, width=800, height=400)
-            rl_img = image_to_reportlab(img_trend, max_width=6, max_height=3)
-            if rl_img: elements.append(rl_img)
-        except Exception as e:
-            elements.append(Paragraph(f"总词频趋势图生成失败: {e}", normal_style))
-        elements.append(Spacer(1, 10))
-
-        # 2. 技术应用对比
-        elements.append(Paragraph("1.2 各项技术应用对比", h2_style))
-        try:
-            tech_metrics = ['人工智能', '区块链', '大数据', '云计算', '物联网', '5G通信', '数字平台', '数字安全', '智慧行业应用']
-            tech_data = df[tech_metrics].mean().reset_index()
-            tech_data.columns = ['技术', '平均值']
-            fig_tech = px.bar(tech_data, x='技术', y='平均值', title='各项技术应用平均值对比', labels={'平均值': '平均词频', '技术': '技术类型'}, color='技术')
-            img_tech = fig_to_image(fig_tech, width=800, height=400)
-            rl_img = image_to_reportlab(img_tech, max_width=6, max_height=3)
-            if rl_img: elements.append(rl_img)
-        except Exception as e:
-            elements.append(Paragraph(f"技术对比图表生成失败: {e}", normal_style))
-        elements.append(Spacer(1, 10))
-
-        # 3. 行业数字化分布
-        elements.append(Paragraph("1.3 行业数字化程度分布", h2_style))
-        try:
-            industry_data = df.groupby('行业名称')['数字化程度'].mean().reset_index()
-            industry_data = industry_data.sort_values('数字化程度', ascending=False)
-            fig_industry = px.bar(industry_data, x='数字化程度', y='行业名称', title='行业数字化程度分布', labels={'数字化程度': '平均数字化程度', '行业名称': '行业名称'}, orientation='h', color='数字化程度', color_continuous_scale='Blues')
-            img_industry = fig_to_image(fig_industry, width=800, height=500)
-            rl_img = image_to_reportlab(img_industry, max_width=6, max_height=4)
-            if rl_img: elements.append(rl_img)
-        except Exception as e:
-            elements.append(Paragraph(f"行业分布图表生成失败: {e}", normal_style))
-        elements.append(Spacer(1, 10))
-
-        # 4. 企业数字化排名
-        elements.append(Paragraph("1.4 企业数字化水平排名", h2_style))
-        try:
-            company_data = df.groupby('企业名称')['数字化程度'].mean().reset_index()
-            company_data = company_data.sort_values('数字化程度', ascending=False).head(20)
-            fig_rank = px.bar(company_data, x='企业名称', y='数字化程度', title='企业数字化水平TOP20', labels={'数字化程度': '平均数字化程度', '企业名称': '企业名称'}, color='数字化程度', color_continuous_scale='Viridis')
-            img_rank = fig_to_image(fig_rank, width=800, height=400)
-            rl_img = image_to_reportlab(img_rank, max_width=6, max_height=3)
-            if rl_img: elements.append(rl_img)
-        except Exception as e:
-            elements.append(Paragraph(f"企业排名图表生成失败: {e}", normal_style))
-        elements.append(Spacer(1, 10))
-
-        # 5. 相关性热力图
-        elements.append(Paragraph("1.5 指标相关性热力图", h2_style))
-        try:
-            correlation_metrics = tech_metrics + ['总词频', '数字化程度', '技术多样性']
-            correlation_df = df[correlation_metrics].corr()
-            fig_corr = px.imshow(correlation_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r', title="指标相关性热力图")
-            fig_corr.update_layout(width=800, height=600)
-            img_corr = fig_to_image(fig_corr, width=800, height=600)
-            rl_img = image_to_reportlab(img_corr, max_width=6, max_height=4)
-            if rl_img: elements.append(rl_img)
-        except Exception as e:
-            elements.append(Paragraph(f"相关性热力图生成失败: {e}", normal_style))
-        elements.append(PageBreak())
-
-        # ========== 企业详细数据 ==========
-        elements.append(Paragraph("二、企业详细数据", h1_style))
-        display_cols = ['年份', '企业名称', '股票代码', '行业名称', '总词频', '数字化程度', '技术种类数', '技术多样性', '年度增长率']
-        display_cols = [col for col in display_cols if col in df.columns]
-        elements.append(Paragraph("2.1 企业详细数据", h2_style))
-        if selected_company:
-            detail_data = df[df['企业名称'] == selected_company][display_cols].sort_values('年份', ascending=False)
-        else:
-            detail_data = df[display_cols].sort_values(['行业名称', '企业名称', '年份'], ascending=[True, True, False]).head(50)
-        detail_data = detail_data.astype(str)
-        table_data = [display_cols] + detail_data.values.tolist()
-        col_widths = [1.5*cm] * len(display_cols)
-        detail_table = Table(table_data, colWidths=col_widths)
-        detail_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), font_name),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
-            ('PADDING', (0, 0), (-1, -1), 3)
-        ]))
-        elements.append(detail_table)
-        elements.append(PageBreak())
-
-        # ========== 分析结论与建议 ==========
-        elements.append(Paragraph("三、分析结论与建议", h1_style))
-        elements.append(Spacer(1, 10))
-        # 智能结论与建议
         if selected_company:
             company_data = df[df['企业名称'] == selected_company]
-            industry = company_data['行业名称'].iloc[0] if not company_data.empty else ""
-            industry_companies = df[df['行业名称'] == industry]
-            industry_avg = industry_companies['数字化程度'].mean() if not industry_companies.empty else 0
-            company_avg = company_data['数字化程度'].mean() if not company_data.empty else 0
-            tech_totals = company_data[tech_metrics].sum() if not company_data.empty else None
-            top_tech = tech_totals.idxmax() if tech_totals is not None and tech_totals.max() > 0 else "无显著应用技术"
-            trend = "上升" if company_data['数字化程度'].iloc[-1] > company_data['数字化程度'].iloc[0] else \
-                    "下降" if company_data['数字化程度'].iloc[-1] < company_data['数字化程度'].iloc[0] else "稳定"
-            diversity = company_data['技术多样性'].mean() if not company_data.empty else 0
-
-            conclusions = [
-                f"1. {selected_company}的平均数字化程度为{company_avg:.2f}，{industry}行业平均为{industry_avg:.2f}。" +
-                ("企业数字化水平高于行业平均，表现优秀。" if company_avg > industry_avg else
-                 "企业数字化水平低于行业平均，有待提升。"),
-                f"2. 企业应用最广泛的技术是{top_tech}，该技术累计词频达到{tech_totals.max():.0f}。" if tech_totals is not None else "",
-                f"3. 企业数字化程度在{year_range[0]}-{year_range[1]}年间呈现{trend}趋势。",
-                f"4. 技术多样性指数为{diversity:.2f}，表明企业" +
-                ("技术应用较为多元化" if diversity > 0.5 else "技术应用相对单一") + "。",
-                "5. 建议：",
-                "   • 持续加强核心技术的应用和投入",
-                "   • 补齐短板技术，提升技术多样性",
-                "   • 建立数字化转型长效机制，确保持续发展",
-                "   • 参考行业领先企业的最佳实践经验"
-            ]
+            fig = make_subplots(rows=3, cols=3, subplot_titles=tech_metrics)
+            for i, tech in enumerate(tech_metrics):
+                row = i // 3 + 1
+                col = i % 3 + 1
+                fig.add_trace(
+                    go.Scatter(
+                        x=company_data['年份'],
+                        y=company_data[tech],
+                        mode='lines+markers',
+                        name=tech
+                    ),
+                    row=row, col=col
+                )
+            fig.update_layout(height=800, title_text=f"{selected_company} 技术应用趋势", showlegend=False)
         else:
-            top_industry = df.groupby('行业名称')['数字化程度'].mean().idxmax()
-            top_company = df.groupby('企业名称')['数字化程度'].mean().idxmax()
-            tech_avg = df[tech_metrics].mean()
-            top_tech = tech_avg.idxmax()
-            avg_digital = df['数字化程度'].mean()
-            conclusions = [
-                f"1. 在所选时间段内，{top_industry}行业的数字化程度最高（{df.groupby('行业名称')['数字化程度'].mean().max():.2f}）。",
-                f"2. 数字化水平最高的企业是{top_company}（{df.groupby('企业名称')['数字化程度'].mean().max():.2f}）。",
-                f"3. 应用最广泛的技术是{top_tech}（平均词频：{tech_avg.max():.0f}）。",
-                f"4. 整体平均数字化程度为{avg_digital:.2f}，表明" +
-                ("大部分企业数字化转型处于较高水平。" if avg_digital > 0.6 else
-                 "大部分企业数字化转型处于中等水平。" if avg_digital > 0.4 else
-                 "大部分企业数字化转型处于初级阶段。"),
-                "5. 建议：",
-                "   • 重点关注数字化程度较低的行业，加大扶持力度",
-                "   • 推广数字化转型成功经验，促进整体提升",
-                "   • 加强核心技术的研发和应用",
-                "   • 建立行业数字化转型评价体系"
-            ]
-        for conclusion in conclusions:
-            if conclusion:
-                elements.append(Paragraph(conclusion, normal_style))
-        elements.append(Spacer(1, 20))
-
-        # ========== 附录 ==========
-        elements.append(Paragraph("四、附录", h1_style))
-        appendix_text = [
-            "1. 数据来源：企业数字化转型研究数据库",
-            "2. 统计周期：1999-2023年",
-            "3. 指标说明：",
-            "   • 总词频：数字化相关词汇出现的总次数",
-            "   • 数字化程度：综合评估企业数字化水平的指标（0-1）",
-            "   • 技术种类数：企业应用的数字化技术种类数量",
-            "   • 技术多样性：衡量企业技术应用多元化程度的指标（0-1）",
-            "   • 年度增长率：(当年总词频-上年总词频)/上年总词频×100%",
-            "4. 报告生成时间：" + datetime.now().strftime('%Y年%m月%d日 %H:%M:%S'),
-            "5. 报告版本：V1.0"
-        ]
-        for text in appendix_text:
-            elements.append(Paragraph(text, normal_style))
-
-        doc.build(elements)
-        pdf_data = buffer.getvalue()
-        buffer.close()
-        return pdf_data
-
+            trend_data = df.groupby('年份')['总词频'].mean().reset_index()
+            fig = px.line(trend_data, x='年份', y='总词频', title='总词频年度趋势', markers=True)
+        img = fig_to_image(fig, width=900, height=600)
+        rl_img = image_to_reportlab(img, max_width=16, max_height=10)
+        if rl_img:
+            elements.append(rl_img)
+            elements.append(Spacer(1, 10))
     except Exception as e:
-        st.error(f"PDF生成失败: {str(e)}")
-        return b""
+        elements.append(Paragraph(f"图表生成失败: {e}", styles['NormalCN']))
+
+    # 详细数据表（前20条，智能美观）
+    elements.append(Paragraph("四、详细数据（前20条）", styles['MyHeader']))
+    display_cols = ['年份', '企业名称', '股票代码', '行业名称', '总词频', '数字化程度', '技术种类数', '技术多样性', '年度增长率']
+    display_cols = [col for col in display_cols if col in df.columns]
+    if selected_company:
+        detail_df = df[df['企业名称'] == selected_company][display_cols].sort_values('年份', ascending=False).head(20)
+    else:
+        detail_df = df[display_cols].sort_values(['行业名称', '企业名称', '年份'], ascending=[True, True, False]).head(20)
+    detail_df = detail_df.astype(str)
+    table_data = [display_cols] + detail_df.values.tolist()
+    # 智能自适应列宽
+    col_widths = []
+    for col in display_cols:
+        max_len = max([len(str(x)) for x in [col] + detail_df[col].tolist()])
+        col_widths.append(max(2*cm, min(4*cm, max_len * 0.5 * cm)))
+    detail_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    detail_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), font_name),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),  # 表头
+        ('FONTSIZE', (0, 1), (-1, -1), 11), # 内容
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1976D2')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey]),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#1976D2')),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#222222')),
+        ('WORDWRAP', (0, 0), (-1, -1), 'CJK')
+    ]))
+    elements.append(detail_table)
+    elements.append(Spacer(1, 10))
+
+    doc.build(elements)
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    return pdf_data
 
 # 标题和描述
 st.markdown('<h1 class="main-header">企业数字化转型数据查询分析系统</h1>', unsafe_allow_html=True)

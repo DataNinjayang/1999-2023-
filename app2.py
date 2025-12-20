@@ -516,7 +516,7 @@ if df is not None:
         filename = f"企业数字化转型数据_{year_range[0]}-{year_range[1]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
     
     # 生成PDF按钮
-    if st.sidebar.button("生成PDF分析报告", type="primary", use_container_width=True):
+    if st.sidebar.button("生成PDF分析报告", type="primary", width='stretch'):
         with st.spinner("正在生成PDF报告，请稍候..."):
             # 数据筛选
             filtered_df = df[
@@ -538,7 +538,7 @@ if df is not None:
                     data=pdf_data,
                     file_name=filename,
                     mime="application/pdf",
-                    use_container_width=True
+                    width='stretch'
                 )
             else:
                 st.sidebar.error("PDF生成失败，请稍后重试。")
@@ -677,7 +677,7 @@ if df is not None:
             showlegend=False
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # 年度增长率图表
         st.header("年度增长率分析")
@@ -701,7 +701,7 @@ if df is not None:
             yaxis_title="增长率 (%)"
         )
         
-        st.plotly_chart(growth_fig, use_container_width=True)
+        st.plotly_chart(growth_fig, width='stretch')
         
         # 行业对比分析
         st.header("行业对比分析")
@@ -752,13 +752,13 @@ if df is not None:
             legend_title="数据来源"
         )
         
-        st.plotly_chart(comparison_fig, use_container_width=True)
+        st.plotly_chart(comparison_fig, width='stretch')
         
         # 企业详细数据表格
         st.header("企业详细数据")
         st.dataframe(
             company_data.sort_values('年份', ascending=False),
-            use_container_width=True,
+            width='stretch',
             height=400
         )
         
@@ -807,7 +807,7 @@ if df is not None:
         # 使用Streamlit的数据表格功能
         st.dataframe(
             filtered_df,
-            use_container_width=True,
+            width='stretch',
             height=400
         )
         st.markdown('</div>', unsafe_allow_html=True)
@@ -842,7 +842,7 @@ if df is not None:
                 yaxis_title="平均总词频"
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.markdown('</div>', unsafe_allow_html=True)
         
         with tab2:
@@ -873,7 +873,7 @@ if df is not None:
                 showlegend=False
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.markdown('</div>', unsafe_allow_html=True)
         
         with tab3:
@@ -902,7 +902,7 @@ if df is not None:
                 height=max(400, len(industry_data) * 20)
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.markdown('</div>', unsafe_allow_html=True)
         
         with tab4:
@@ -930,7 +930,7 @@ if df is not None:
                 xaxis={'categoryorder': 'total descending'}
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.markdown('</div>', unsafe_allow_html=True)
         
         # 相关性分析
@@ -962,7 +962,7 @@ if df is not None:
                 height=600
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         else:
             st.info("请至少选择一个指标进行相关性分析")
         

@@ -14,7 +14,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 设置中文字体
-plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei', 'SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei', 'SimHei', 'Microsoft YaHei', 'DejaVu Sans', 'Source Han Sans CN']
 plt.rcParams['axes.unicode_minus'] = False
 sns.set(style='whitegrid', font='WenQuanYi Zen Hei', rc={'axes.unicode_minus': False})
 
@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS
+# 自定义CSS（新增跳转按钮样式）
 st.markdown("""
 <style>
     .main-header {
@@ -176,6 +176,42 @@ st.markdown("""
         margin-bottom: 0.8rem;
         font-weight: bold;
     }
+    .external-link-button {
+        display: inline-block;
+        background-color: #1E88E5;
+        color: white !important;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        text-align: center;
+        text-decoration: none !important;
+        font-weight: bold;
+        width: 100%;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: background-color 0.3s;
+    }
+    .external-link-button:hover {
+        background-color: #1565C0 !important;
+        color: white !important;
+    }
+    /* 新增跳转按钮样式 */
+    .navigate-button {
+        display: inline-block;
+        background-color: #28a745;
+        color: white !important;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        text-align: center;
+        text-decoration: none !important;
+        font-weight: bold;
+        width: 100%;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: background-color 0.3s;
+        margin-top: 1rem;
+    }
+    .navigate-button:hover {
+        background-color: #218838 !important;
+        color: white !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -233,7 +269,7 @@ def image_to_reportlab(img, max_width=18, max_height=12):
         st.warning(f"图片处理失败: {e}")
         return None
 
-# PDF导出功能函数
+# PDF导出功能函数（彻底修复乱码问题）
 def generate_pdf(df, selected_company, year_range, selected_industries):
     try:
         from reportlab.lib.pagesizes import A4
@@ -244,91 +280,135 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
         from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.pdfbase.pdfdoc import PDFDocument
         import tempfile
         import requests
         import os
+        import sys
+        import io
 
         # 检查数据是否为空
         if df.empty:
             st.error("筛选后的数据为空，无法生成PDF报告")
             return None
 
-        # 创建临时字体文件（如果系统没有中文字体）
+        # ===== 彻底修复中文字体问题 =====
+        # 1. 定义更全面的中文字体路径
+        font_paths = [
+            # Linux
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            # Windows
+            "C:/Windows/Fonts/simhei.ttf",
+            "C:/Windows/Fonts/microsoftyahei.ttf",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/simsun.ttc",
+            # MacOS
+            "/System/Library/Fonts/PingFang.ttc",
+            "/Library/Fonts/Microsoft/SimHei.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/SourceHanSansCN-Regular.otf"
+        ]
+        
+        # 2. 注册中文字体（增加容错）
+        font_name = "ChineseFont"
+        font_registered = False
+        
         try:
-            # 尝试使用系统字体
-            font_paths = [
-                "/usr/share/fonts/truetype/msttcorefonts/SimHei.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "C:/Windows/Fonts/simhei.ttf",
-                "/System/Library/Fonts/Arial.ttf"
-            ]
-            
-            font_found = False
-            font_name = 'Helvetica'  # 默认字体
-            
+            # 尝试注册系统中文字体
             for font_path in font_paths:
                 if os.path.exists(font_path):
                     try:
-                        font_name = 'CustomFont'
-                        pdfmetrics.registerFont(TTFont(font_name, font_path))
-                        font_found = True
+                        if font_path.endswith('.ttc'):
+                            pdfmetrics.registerFont(TTFont(font_name, font_path, subfontIndex=0))
+                        else:
+                            pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        font_registered = True
+                        st.success(f"成功加载系统字体: {os.path.basename(font_path)}")
                         break
-                    except:
+                    except Exception as e:
                         continue
             
-            if not font_found:
-                # 使用默认字体
-                font_name = 'Helvetica'
-                st.info("使用默认字体生成PDF")
-                
+            # 3. 如果系统无中文字体，使用内置备用方案（思源黑体）
+            if not font_registered:
+                try:
+                    # 下载思源黑体（备用方案）
+                    font_url = "https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf"
+                    response = requests.get(font_url, timeout=10)
+                    if response.status_code == 200:
+                        font_data = BytesIO(response.content)
+                        pdfmetrics.registerFont(TTFont(font_name, font_data))
+                        font_registered = True
+                        st.success("成功加载备用中文字体（思源黑体）")
+                except:
+                    # 最终备用：使用ReportLab内置字体
+                    font_name = "Helvetica"
+                    st.info("未找到中文字体，将使用默认字体（部分中文可能显示为方框）")
+                    
         except Exception as e:
-            st.warning(f"字体处理警告: {e}")
-            font_name = 'Helvetica'
+            st.warning(f"字体注册失败: {e}")
+            font_name = "Helvetica"
 
-        # 创建样式
+        # 4. 创建样式（强制指定中文字体）
         styles = getSampleStyleSheet()
         
-        # 添加自定义样式
-        try:
-            styles.add(ParagraphStyle(
-                name='MyTitle', 
-                fontName=font_name, 
-                fontSize=22, 
-                alignment=TA_CENTER, 
-                textColor=colors.HexColor('#1E88E5'), 
-                spaceAfter=20
-            ))
-            styles.add(ParagraphStyle(
-                name='MySubTitle', 
-                fontName=font_name, 
-                fontSize=18, 
-                alignment=TA_CENTER, 
-                textColor=colors.HexColor('#D32F2F'), 
-                spaceAfter=10
-            ))
-            styles.add(ParagraphStyle(
-                name='MyHeader', 
-                fontName=font_name, 
-                fontSize=15, 
-                alignment=TA_LEFT, 
-                textColor=colors.HexColor('#1976D2'), 
-                spaceAfter=8
-            ))
-            styles.add(ParagraphStyle(
-                name='NormalCN', 
-                fontName=font_name, 
-                fontSize=12, 
-                alignment=TA_LEFT, 
-                leading=18, 
-                spaceAfter=6
-            ))
-        except:
-            # 如果自定义样式失败，使用默认样式
-            styles['MyTitle'] = styles['Title']
-            styles['MySubTitle'] = styles['Heading2']
-            styles['MyHeader'] = styles['Heading3']
-            styles['NormalCN'] = styles['Normal']
+        # 标题样式（优化中文渲染）
+        title_style = ParagraphStyle(
+            name='MyTitle',
+            fontName=font_name,
+            fontSize=22,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#1E88E5'),
+            spaceAfter=20,
+            leading=26,
+            encoding='utf-8'
+        )
+        
+        # 副标题样式
+        subtitle_style = ParagraphStyle(
+            name='MySubTitle',
+            fontName=font_name,
+            fontSize=18,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#D32F2F'),
+            spaceAfter=10,
+            leading=22,
+            encoding='utf-8'
+        )
+        
+        # 页眉样式
+        header_style = ParagraphStyle(
+            name='MyHeader',
+            fontName=font_name,
+            fontSize=15,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor('#1976D2'),
+            spaceAfter=8,
+            leading=18,
+            encoding='utf-8'
+        )
+        
+        # 普通文本样式（中文优化）
+        normal_style = ParagraphStyle(
+            name='NormalCN',
+            fontName=font_name,
+            fontSize=12,
+            alignment=TA_LEFT,
+            leading=20,  # 增加行高，优化中文显示
+            spaceAfter=6,
+            encoding='utf-8'
+        )
+        
+        styles.add(title_style)
+        styles.add(subtitle_style)
+        styles.add(header_style)
+        styles.add(normal_style)
 
+        # 创建PDF文档（指定编码）
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer, 
@@ -336,20 +416,23 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
             rightMargin=2*cm, 
             leftMargin=2*cm, 
             topMargin=2*cm, 
-            bottomMargin=2*cm
+            bottomMargin=2*cm,
+            title=f"企业数字化转型分析报告_{selected_company if selected_company else '行业整体'}",
+            author="企业数字化转型数据查询分析系统",
+            encoding='utf-8'
         )
         elements = []
 
-        # 封面
-        elements.append(Paragraph("企业数字化转型数据分析报告", styles['MyTitle']))
+        # 封面（确保中文编码）
+        elements.append(Paragraph("企业数字化转型数据分析报告".encode('utf-8').decode('utf-8'), title_style))
         if selected_company:
-            elements.append(Paragraph(f"{selected_company} 专项分析", styles['MySubTitle']))
+            elements.append(Paragraph(f"{selected_company} 专项分析".encode('utf-8').decode('utf-8'), subtitle_style))
         else:
-            elements.append(Paragraph("行业整体分析报告", styles['MySubTitle']))
+            elements.append(Paragraph("行业整体分析报告".encode('utf-8').decode('utf-8'), subtitle_style))
         elements.append(Spacer(1, 20))
 
         # 基本信息
-        elements.append(Paragraph("一、企业基本信息", styles['MyHeader']))
+        elements.append(Paragraph("一、企业基本信息".encode('utf-8').decode('utf-8'), header_style))
         
         # 安全地获取数据信息
         try:
@@ -358,18 +441,18 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
             industry_count = df['行业名称'].nunique() if '行业名称' in df.columns else 0
             
             info_data = [
-                ["企业名称", selected_company or "全部企业"],
-                ["年份范围", f"{year_range[0]} - {year_range[1]}"],
-                ["行业", ", ".join(selected_industries) if selected_industries else "全部行业"],
-                ["数据记录数", f"{record_count:,} 条"],
-                ["涉及企业数", f"{company_count} 家"],
-                ["涉及行业数", f"{industry_count} 个"],
-                ["报告生成时间", datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+                ["企业名称".encode('utf-8').decode('utf-8'), selected_company or "全部企业".encode('utf-8').decode('utf-8')],
+                ["年份范围".encode('utf-8').decode('utf-8'), f"{year_range[0]} - {year_range[1]}"],
+                ["行业".encode('utf-8').decode('utf-8'), ", ".join(selected_industries) if selected_industries else "全部行业".encode('utf-8').decode('utf-8')],
+                ["数据记录数".encode('utf-8').decode('utf-8'), f"{record_count:,} 条".encode('utf-8').decode('utf-8')],
+                ["涉及企业数".encode('utf-8').decode('utf-8'), f"{company_count} 家".encode('utf-8').decode('utf-8')],
+                ["涉及行业数".encode('utf-8').decode('utf-8'), f"{industry_count} 个".encode('utf-8').decode('utf-8')],
+                ["报告生成时间".encode('utf-8').decode('utf-8'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
             ]
         except Exception as e:
             info_data = [
-                ["错误", f"数据信息获取失败: {str(e)}"],
-                ["报告生成时间", datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+                ["错误".encode('utf-8').decode('utf-8'), f"数据信息获取失败: {str(e)}"],
+                ["报告生成时间".encode('utf-8').decode('utf-8'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
             ]
 
         info_table = Table(info_data, colWidths=[3*cm, 10*cm])
@@ -379,13 +462,14 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
             ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#F0F8FF')),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey)
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('TEXTENCODING', (0, 0), (-1, -1), 'utf-8')  # 指定文本编码
         ]))
         elements.append(info_table)
         elements.append(Spacer(1, 12))
 
         # 关键指标
-        elements.append(Paragraph("二、关键指标概览", styles['MyHeader']))
+        elements.append(Paragraph("二、关键指标概览".encode('utf-8').decode('utf-8'), header_style))
         
         try:
             if selected_company and '企业名称' in df.columns:
@@ -396,28 +480,28 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
                     if not latest_data_df.empty:
                         latest_data = latest_data_df.iloc[0]
                         overview_data = [
-                            ["最新年份", str(latest_year)],
-                            ["最新数字化程度", f"{latest_data.get('数字化程度', 0):.2f}"],
-                            ["平均数字化程度", f"{company_data.get('数字化程度', pd.Series([0])).mean():.2f}"],
-                            ["技术种类数", f"{latest_data.get('技术种类数', 0):.0f}"],
-                            ["技术多样性", f"{latest_data.get('技术多样性', 0):.2f}"],
-                            ["累计总词频", f"{company_data.get('总词频', pd.Series([0])).sum():.0f}"]
+                            ["最新年份".encode('utf-8').decode('utf-8'), str(latest_year)],
+                            ["最新数字化程度".encode('utf-8').decode('utf-8'), f"{latest_data.get('数字化程度', 0):.2f}"],
+                            ["平均数字化程度".encode('utf-8').decode('utf-8'), f"{company_data.get('数字化程度', pd.Series([0])).mean():.2f}"],
+                            ["技术种类数".encode('utf-8').decode('utf-8'), f"{latest_data.get('技术种类数', 0):.0f}"],
+                            ["技术多样性".encode('utf-8').decode('utf-8'), f"{latest_data.get('技术多样性', 0):.2f}"],
+                            ["累计总词频".encode('utf-8').decode('utf-8'), f"{company_data.get('总词频', pd.Series([0])).sum():.0f}"]
                         ]
                     else:
-                        overview_data = [["数据", "暂无最新年份数据"]]
+                        overview_data = [["数据".encode('utf-8').decode('utf-8'), "暂无最新年份数据".encode('utf-8').decode('utf-8')]]
                 else:
-                    overview_data = [["数据", "企业数据为空"]]
+                    overview_data = [["数据".encode('utf-8').decode('utf-8'), "企业数据为空".encode('utf-8').decode('utf-8')]]
             else:
                 overview_data = [
-                    ["企业数量", f"{df['企业名称'].nunique() if '企业名称' in df.columns else 0} 家"],
-                    ["行业数量", f"{df['行业名称'].nunique() if '行业名称' in df.columns else 0} 个"],
-                    ["平均数字化程度", f"{df.get('数字化程度', pd.Series([0])).mean():.2f}"],
-                    ["最高数字化程度", f"{df.get('数字化程度', pd.Series([0])).max():.2f}"],
-                    ["最低数字化程度", f"{df.get('数字化程度', pd.Series([0])).min():.2f}"],
-                    ["平均总词频", f"{df.get('总词频', pd.Series([0])).mean():.0f}"]
+                    ["企业数量".encode('utf-8').decode('utf-8'), f"{df['企业名称'].nunique() if '企业名称' in df.columns else 0} 家".encode('utf-8').decode('utf-8')],
+                    ["行业数量".encode('utf-8').decode('utf-8'), f"{df['行业名称'].nunique() if '行业名称' in df.columns else 0} 个".encode('utf-8').decode('utf-8')],
+                    ["平均数字化程度".encode('utf-8').decode('utf-8'), f"{df.get('数字化程度', pd.Series([0])).mean():.2f}"],
+                    ["最高数字化程度".encode('utf-8').decode('utf-8'), f"{df.get('数字化程度', pd.Series([0])).max():.2f}"],
+                    ["最低数字化程度".encode('utf-8').decode('utf-8'), f"{df.get('数字化程度', pd.Series([0])).min():.2f}"],
+                    ["平均总词频".encode('utf-8').decode('utf-8'), f"{df.get('总词频', pd.Series([0])).mean():.0f}"]
                 ]
         except Exception as e:
-            overview_data = [["指标", f"指标计算错误: {str(e)}"]]
+            overview_data = [["指标".encode('utf-8').decode('utf-8'), f"指标计算错误: {str(e)}"]]
 
         overview_table = Table(overview_data, colWidths=[4*cm, 6*cm])
         overview_table.setStyle(TableStyle([
@@ -426,13 +510,14 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
             ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E3F2FD')),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey)
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('TEXTENCODING', (0, 0), (-1, -1), 'utf-8')
         ]))
         elements.append(overview_table)
         elements.append(Spacer(1, 12))
 
         # 可视化图表
-        elements.append(Paragraph("三、数字化可视化数据图表", styles['MyHeader']))
+        elements.append(Paragraph("三、数字化可视化数据图表".encode('utf-8').decode('utf-8'), header_style))
         
         try:
             tech_metrics = ['人工智能', '区块链', '大数据', '云计算', '物联网', '5G通信', '数字平台', '数字安全', '智慧行业应用']
@@ -494,13 +579,13 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
                 elements.append(rl_img)
                 elements.append(Spacer(1, 10))
             else:
-                elements.append(Paragraph("图表生成失败", styles['NormalCN']))
+                elements.append(Paragraph("图表生成失败".encode('utf-8').decode('utf-8'), normal_style))
                 
         except Exception as e:
-            elements.append(Paragraph(f"图表生成失败: {str(e)}", styles['NormalCN']))
+            elements.append(Paragraph(f"图表生成失败: {str(e)}".encode('utf-8').decode('utf-8'), normal_style))
 
         # 详细数据表（前20条）
-        elements.append(Paragraph("四、详细数据（前20条）", styles['MyHeader']))
+        elements.append(Paragraph("四、详细数据（前20条）".encode('utf-8').decode('utf-8'), header_style))
         
         try:
             # 安全地选择显示的列
@@ -527,11 +612,13 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
                 if sort_cols:
                     detail_df = detail_df.sort_values(sort_cols, ascending=[True]*len(sort_cols))
             
-            # 限制行数并转换为字符串
+            # 限制行数并转换为字符串（处理中文编码）
             detail_df = detail_df.head(20).astype(str)
             
             if not detail_df.empty:
-                table_data = [display_cols] + detail_df.values.tolist()
+                # 处理中文列名和数据的编码
+                table_header = [col.encode('utf-8').decode('utf-8') for col in display_cols]
+                table_data = [table_header] + [[str(cell).encode('utf-8').decode('utf-8') for cell in row] for row in detail_df.values.tolist()]
                 
                 # 智能自适应列宽
                 col_widths = []
@@ -550,25 +637,34 @@ def generate_pdf(df, selected_company, year_range, selected_industries):
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
-                    ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#1976D2'))
+                    ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#1976D2')),
+                    ('TEXTENCODING', (0, 0), (-1, -1), 'utf-8')
                 ]))
                 elements.append(detail_table)
             else:
-                elements.append(Paragraph("无详细数据可显示", styles['NormalCN']))
+                elements.append(Paragraph("无详细数据可显示".encode('utf-8').decode('utf-8'), normal_style))
                 
         except Exception as e:
-            elements.append(Paragraph(f"详细数据表格生成失败: {str(e)}", styles['NormalCN']))
+            elements.append(Paragraph(f"详细数据表格生成失败: {str(e)}".encode('utf-8').decode('utf-8'), normal_style))
         
         elements.append(Spacer(1, 10))
 
-        # 生成PDF
+        # 生成PDF（强制UTF-8编码）
         doc.build(elements)
         pdf_data = buffer.getvalue()
         buffer.close()
+        
+        # 验证PDF数据
+        if len(pdf_data) < 100:
+            st.error("生成的PDF文件无效（文件过小）")
+            return None
+            
         return pdf_data
         
     except Exception as e:
         st.error(f"PDF生成过程中发生错误: {str(e)}")
+        import traceback
+        st.error(f"详细错误信息: {traceback.format_exc()}")
         return None
 
 # 标题和描述
@@ -718,7 +814,7 @@ if df is not None:
     
     st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
-    # ===== PDF导出功能 - 移到侧边栏 =====
+    # PDF导出功能 - 移到侧边栏
     st.sidebar.markdown('<div class="export-container">', unsafe_allow_html=True)
     st.sidebar.markdown('<div class="export-title">📄📄 导出分析报告</div>', unsafe_allow_html=True)
     
@@ -767,7 +863,16 @@ if df is not None:
                 st.sidebar.error(f"生成PDF时发生错误: {str(e)}")
     
     st.sidebar.markdown('</div>', unsafe_allow_html=True)
-    # ====================================
+    
+    # ===== 添加外部链接按钮（侧边栏最后）=====
+    st.sidebar.markdown("---")  # 分隔线
+    st.sidebar.markdown('<h3 class="sidebar-title">系统导航</h3>', unsafe_allow_html=True)
+    # 创建跳转按钮（绿色样式，与现有按钮区分）
+    st.sidebar.markdown(
+        '<a href="https://digital-encomy-main.streamlit.app/" target="_blank" class="navigate-button">🌐 访问数字经济主系统</a>',
+        unsafe_allow_html=True
+    )
+    # ==========================================
     
     # 数据筛选
     filtered_df = df[
